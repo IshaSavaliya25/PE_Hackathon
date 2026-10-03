@@ -1,5 +1,8 @@
-# Python
+# =========================================================
+# Python & Bytecode
+# =========================================================
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -20,38 +23,87 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environments
+# =========================================================
+# Virtual Environments (Root and Subdirectories)
+# =========================================================
 venv/
-env/
-ENV/
+**/venv/
 .venv/
+**/.venv/
+env/
+**/env/
+ENV/
 env.bak/
 venv.bak/
 
-# Environment Variables & Secrets
+# =========================================================
+# Environment Variables, Secrets & API Keys
+# =========================================================
 .env
+**/.env
 .env.local
 .env.*.local
 *.env
+# Ensure template is tracked
+!.env.example
+!**/.env.example
 
-# Streamlit
+# =========================================================
+# Streamlit Configuration & Secrets
+# =========================================================
 .streamlit/secrets.toml
+.streamlit/credentials.toml
 
-# IDE & Editors
+# =========================================================
+# Uploaded Documents & Test Files (Prevent Leaking Private Docs)
+# =========================================================
+uploads/
+**/uploads/
+temp/
+**/temp/
+tmp/
+**/tmp/
+*.pdf
+*.docx
+*.doc
+*.csv
+*.xlsx
+*.pptx
+
+# =========================================================
+# Exported Chat History & Session Dumps
+# =========================================================
+*_history.json
+chat_history/
+**/chat_history/
+
+# =========================================================
+# Databases & Local Vector Stores
+# =========================================================
+*.sqlite
+*.sqlite3
+*.db
+*.index
+chroma_db/
+.chroma/
+vector_store/
+
+# =========================================================
+# IDEs, Editors & OS Files
+# =========================================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# Operating System Files
 .DS_Store
 Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
 
-# Logs & Temporary Files
+# =========================================================
+# Logs
+# =========================================================
 *.log
-temp/
-tmp/
-uploads/
+logs/
+**/logs/

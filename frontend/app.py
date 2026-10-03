@@ -127,8 +127,16 @@ if "current_session_id" not in st.session_state or st.session_state.current_sess
 if "backend_url" not in st.session_state:
     st.session_state.backend_url = "http://localhost:8000"
 
+def check_backend_alive(url: str) -> bool:
+    try:
+        r = requests.get(f"{url.rstrip('/')}/", timeout=1.5)
+        return r.status_code == 200
+    except Exception:
+        return False
+
 if "use_mock_backend" not in st.session_state:
-    st.session_state.use_mock_backend = True
+    # Auto-detect: if backend is up, use real backend
+    st.session_state.use_mock_backend = not check_backend_alive(st.session_state.backend_url)
 
 if "show_uploader" not in st.session_state:
     st.session_state.show_uploader = True
