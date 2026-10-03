@@ -49,15 +49,29 @@ st.markdown("""
         border: 1px solid #bae6fd;
     }
 
-    /* Document card */
-    .doc-card {
-        padding: 12px;
-        border-radius: 8px;
+    /* Document banner in chat */
+    .upload-container {
         background: #ffffff;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-        margin-bottom: 12px;
-        font-size: 0.9rem;
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        text-align: center;
+        transition: border-color 0.2s;
+    }
+    .upload-container:hover {
+        border-color: #3b82f6;
+    }
+    
+    .active-doc-banner {
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+        border-radius: 10px;
+        padding: 12px 18px;
+        margin-bottom: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
     
     /* Chat message container refinements */
@@ -97,7 +111,7 @@ if "sessions" not in st.session_state:
             "messages": [
                 {
                     "role": "assistant",
-                    "content": "Hello! Upload a document from the sidebar to start asking questions about its contents.",
+                    "content": "👋 Welcome! Upload your document above in the chat to start asking questions.",
                     "time": datetime.now().strftime("%H:%M"),
                     "sources": []
                 }
@@ -116,9 +130,12 @@ if "backend_url" not in st.session_state:
 if "use_mock_backend" not in st.session_state:
     st.session_state.use_mock_backend = True
 
+if "show_uploader" not in st.session_state:
+    st.session_state.show_uploader = True
+
 
 # ---------------------------------------------------------
-# Backend API Helper Functions (Easy for your friend to connect)
+# Backend API Helper Functions
 # ---------------------------------------------------------
 def call_backend_upload(file, backend_url: str):
     """
@@ -136,17 +153,6 @@ def call_backend_upload(file, backend_url: str):
 def call_backend_query(question: str, doc_name: str, history: list, backend_url: str):
     """
     Sends user query to the backend: POST {backend_url}/api/chat
-    Payload:
-    {
-        "query": question,
-        "document_name": doc_name,
-        "history": [{"role": m["role"], "content": m["content"]} for m in history]
-    }
-    Expects JSON:
-    {
-        "answer": "...",
-        "sources": [{"page": 1, "text": "..."}]
-    }
     """
     url = f"{backend_url.rstrip('/')}/api/chat"
     payload = {
@@ -200,80 +206,17 @@ def mock_document_answer(question: str, doc_name: str) -> dict:
 
 
 # ---------------------------------------------------------
-# Sidebar: Document Management, Session History & Settings
+# Sidebar: Sessions, Backend Settings, and Export
 # ---------------------------------------------------------
 current_session = st.session_state.sessions[st.session_state.current_session_id]
 
 with st.sidebar:
-    st.markdown('<div class="sidebar-header">📄 Document Chatbot</div>', unsafe_allow_html=True)
-    st.caption("AI-Powered Document Intelligence & Retrieval")
-    
+    st.markdown('<div class="sidebar-header">💬 Chat Manager</div>', unsafe_allow_html=True)
+    st.caption("Document Q&A Sessions & Settings")
     st.divider()
 
-    # 1. Document Upload Section
-    st.markdown("### 📤 Upload Document")
-    uploaded_file = st.file_uploader(
-        "Choose a document file",
-        type=["pdf", "docx", "txt", "csv", "md"],
-        help="Upload PDF, DOCX, TXT, CSV, or Markdown files"
-    )
-
-    if uploaded_file is not None:
-        file_size_kb = uploaded_file.size / 1024
-        file_size_str = f"{file_size_kb:.1f} KB" if file_size_kb < 1024 else f"{(file_size_kb/1024):.2f} MB"
-        
-        # Display file metadata preview
-        st.markdown(f"""
-        <div class="doc-card">
-            <b>File:</b> {uploaded_file.name}<br>
-            <b>Size:</b> {file_size_str}<br>
-            <b>Type:</b> {uploaded_file.type or 'Document'}
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button("⚡ Process & Set Active", use_container_width=True, type="primary"):
-            with st.spinner("Processing document..."):
-                doc_name = uploaded_file.name
-                if not st.session_state.use_mock_backend:
-                    try:
-                        resp = call_backend_upload(uploaded_file, st.session_state.backend_url)
-                        current_session["active_doc"] = doc_name
-                        current_session["doc_meta"] = resp
-                        st.success(f"Uploaded to backend: {doc_name}")
-                        st.rerun()
-                    except Exception as err:
-                        st.error(f"Failed to connect to backend: {err}")
-                        st.info("Tip: You can enable 'Frontend Mock/Demo Mode' below in settings until your friend's backend is ready.")
-                else:
-                    current_session["active_doc"] = doc_name
-                    current_session["doc_meta"] = {
-                        "filename": doc_name,
-                        "size": file_size_str,
-                        "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    # Add notification in chat
-                    current_session["messages"].append({
-                        "role": "assistant",
-                        "content": f"📁 **{doc_name}** has been processed and is ready! Ask me anything about it.",
-                        "time": datetime.now().strftime("%H:%M"),
-                        "sources": []
-                    })
-                    st.success(f"Active Document: {doc_name}")
-                    st.rerun()
-
-    if current_session.get("active_doc"):
-        st.info(f"📌 **Active Doc:** `{current_session['active_doc']}`")
-        if st.button("Detach Active Document", use_container_width=True):
-            current_session["active_doc"] = None
-            current_session["doc_meta"] = None
-            st.rerun()
-    else:
-        st.caption("ℹ️ No document actively linked to this chat.")
-
-    st.divider()
-
-    # 2. Chat Sessions Management
-    st.markdown("### 💬 Chat Sessions")
+    # Chat Sessions Management
+    st.markdown("### 🗂️ Conversation History")
     
     session_keys = list(st.session_state.sessions.keys())
     active_idx = session_keys.index(st.session_state.current_session_id) if st.session_state.current_session_id in session_keys else 0
@@ -298,16 +241,21 @@ with st.sidebar:
                 "messages": [
                     {
                         "role": "assistant",
-                        "content": "New chat session started! Upload a document to ask questions.",
+                        "content": "New conversation session! Upload a document in the chat to start.",
                         "time": datetime.now().strftime("%H:%M"),
                         "sources": []
                     }
                 ],
-                "active_doc": current_session.get("active_doc"),
-                "doc_meta": current_session.get("doc_meta")
+                "active_doc": None,
+                "doc_meta": None
             }
             st.session_state.current_session_id = new_id
             st.rerun()
+
+    # Session stats
+    msg_count = len(current_session["messages"])
+    active_doc_name = current_session.get("active_doc")
+    st.caption(f"📊 Messages: **{msg_count}** | Active Doc: **{active_doc_name or 'None'}**")
 
     # Chat history action buttons
     c1, c2 = st.columns(2)
@@ -323,7 +271,6 @@ with st.sidebar:
             ]
             st.rerun()
     with c2:
-        # Export chat as JSON
         chat_export = json.dumps(current_session["messages"], indent=2)
         st.download_button(
             label="💾 Export",
@@ -335,12 +282,12 @@ with st.sidebar:
 
     st.divider()
 
-    # 3. Backend Integration & Settings (For your friend's backend)
-    with st.expander("⚙️ Backend Configuration", expanded=False):
+    # Backend Integration & Settings
+    with st.expander("⚙️ Backend API Settings", expanded=False):
         st.session_state.use_mock_backend = st.toggle(
             "Mock / Standalone Mode",
             value=st.session_state.use_mock_backend,
-            help="Toggle ON to test frontend immediately without a running backend. Toggle OFF to send live requests to your friend's backend API."
+            help="Toggle ON to test frontend immediately without a running backend. Toggle OFF to hit your friend's backend API."
         )
         
         st.session_state.backend_url = st.text_input(
@@ -363,23 +310,94 @@ header_col1, header_col2 = st.columns([3, 1])
 
 with header_col1:
     st.title("🤖 Document Q&A Chatbot")
-    active_name = current_session.get("active_doc")
-    if active_name:
-        st.markdown(f"**Chatting about:** `{active_name}` <span class='status-badge badge-success'>Document Loaded</span>", unsafe_allow_html=True)
-    else:
-        st.markdown("<span class='status-badge badge-warning'>No Document Attached</span> Upload a document in the sidebar to ask specific questions.", unsafe_allow_html=True)
 
 with header_col2:
     mode_text = "Mock Demo" if st.session_state.use_mock_backend else "Backend API"
     badge_cls = "badge-info" if st.session_state.use_mock_backend else "badge-success"
     st.markdown(f"<div style='text-align: right; padding-top: 15px;'><span class='status-badge {badge_cls}'>Mode: {mode_text}</span></div>", unsafe_allow_html=True)
 
+# ---------------------------------------------------------
+# Document Upload Section (IN THE CHAT PART)
+# ---------------------------------------------------------
+active_doc = current_session.get("active_doc")
+
+# Document status banner if active
+if active_doc:
+    b_col1, b_col2 = st.columns([4, 1])
+    with b_col1:
+        st.markdown(f"""
+        <div class="active-doc-banner">
+            <div>
+                <b>📄 Active Document:</b> <code>{active_doc}</code>
+                <span class='status-badge badge-success'>Attached & Ready</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with b_col2:
+        if st.button("🔄 Replace / Detach", use_container_width=True):
+            current_session["active_doc"] = None
+            current_session["doc_meta"] = None
+            st.rerun()
+
+# Document Upload Box right in chat view
+with st.expander("📎 Upload Document to Chat", expanded=(active_doc is None)):
+    up_col1, up_col2 = st.columns([3, 1])
+    with up_col1:
+        chat_uploaded_file = st.file_uploader(
+            "Choose a document (PDF, Word, TXT, CSV, Markdown)",
+            type=["pdf", "docx", "txt", "csv", "md"],
+            key="chat_doc_uploader",
+            label_visibility="collapsed"
+        )
+    with up_col2:
+        upload_btn = st.button("⚡ Upload & Analyze", use_container_width=True, type="primary")
+
+    if chat_uploaded_file is not None:
+        file_size_kb = chat_uploaded_file.size / 1024
+        file_size_str = f"{file_size_kb:.1f} KB" if file_size_kb < 1024 else f"{(file_size_kb/1024):.2f} MB"
+        st.caption(f"📁 **Selected:** `{chat_uploaded_file.name}` ({file_size_str})")
+
+        if upload_btn:
+            with st.spinner("Processing and indexing document..."):
+                doc_name = chat_uploaded_file.name
+                if not st.session_state.use_mock_backend:
+                    try:
+                        resp = call_backend_upload(chat_uploaded_file, st.session_state.backend_url)
+                        current_session["active_doc"] = doc_name
+                        current_session["doc_meta"] = resp
+                        current_session["messages"].append({
+                            "role": "assistant",
+                            "content": f"📁 **{doc_name}** has been uploaded and indexed via the backend! Ask me anything about it.",
+                            "time": datetime.now().strftime("%H:%M"),
+                            "sources": []
+                        })
+                        st.success(f"Attached `{doc_name}` to chat!")
+                        st.rerun()
+                    except Exception as err:
+                        st.error(f"Failed to connect to backend: {err}")
+                        st.info("Tip: You can enable 'Mock / Standalone Mode' in the sidebar to test without backend.")
+                else:
+                    current_session["active_doc"] = doc_name
+                    current_session["doc_meta"] = {
+                        "filename": doc_name,
+                        "size": file_size_str,
+                        "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    current_session["messages"].append({
+                        "role": "assistant",
+                        "content": f"📁 **{doc_name}** has been processed and attached to this chat! Ask me anything about it.",
+                        "time": datetime.now().strftime("%H:%M"),
+                        "sources": []
+                    })
+                    st.success(f"Attached `{doc_name}` to chat!")
+                    st.rerun()
+
 st.write("---")
 
 # Quick suggestion chips when a document is active
 quick_query = None
 if current_session.get("active_doc"):
-    st.caption("💡 Quick prompts:")
+    st.caption("💡 Quick prompts for this document:")
     q_cols = st.columns(4)
     if q_cols[0].button("📝 Summarize Document", use_container_width=True):
         quick_query = "Please provide a comprehensive summary of this document."
@@ -433,19 +451,19 @@ if user_input:
     # 2. Get answer from backend or mock
     with st.chat_message("assistant", avatar="🤖"):
         with st.spinner("Analyzing document and thinking..."):
-            active_doc = current_session.get("active_doc") or "Uploaded Document"
+            active_doc_name = current_session.get("active_doc") or "Uploaded Document"
             answer_text = ""
             sources = []
 
             if st.session_state.use_mock_backend:
-                resp = mock_document_answer(user_input, active_doc)
+                resp = mock_document_answer(user_input, active_doc_name)
                 answer_text = resp["answer"]
                 sources = resp["sources"]
             else:
                 try:
                     resp = call_backend_query(
                         question=user_input,
-                        doc_name=active_doc,
+                        doc_name=active_doc_name,
                         history=current_session["messages"],
                         backend_url=st.session_state.backend_url
                     )
