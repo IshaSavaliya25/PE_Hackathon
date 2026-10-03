@@ -1,16 +1,39 @@
 import os
+import html
 import time
 import json
 from datetime import datetime
 import streamlit as st
 import requests
 
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+USER_AVATAR = os.path.join(ASSETS_DIR, "user.svg")
+BOT_AVATAR = os.path.join(ASSETS_DIR, "bot.svg")
+
+# Inline SVG icons (Lucide, MIT) for places that accept raw HTML
+SVG_ICONS = {
+    "message": '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    "history": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+    "bot": '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+    "file": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+    "chart": '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    "folder": '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    "lightbulb": '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+}
+
+def svg_icon(name: str, size: int = 18) -> str:
+    return (
+        f'<svg class="svg-icon" xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        f'stroke-linecap="round" stroke-linejoin="round">{SVG_ICONS[name]}</svg>'
+    )
+
 # ---------------------------------------------------------
 # Page Configuration & Styling
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="DocuChat AI | Document Q&A Assistant",
-    page_icon="📄",
+    page_icon=os.path.join(ASSETS_DIR, "logo.svg"),
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -91,6 +114,17 @@ st.markdown("""
         gap: 8px;
     }
     
+    .svg-icon {
+        display: inline-block;
+        vertical-align: -0.2em;
+        flex-shrink: 0;
+    }
+    .icon-heading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
     .msg-timestamp {
         font-size: 0.72rem;
         color: #94a3b8;
@@ -111,7 +145,7 @@ if "sessions" not in st.session_state:
             "messages": [
                 {
                     "role": "assistant",
-                    "content": "👋 Welcome! Upload your document above in the chat to start asking questions.",
+                    "content": "Welcome! Upload your document above in the chat to start asking questions.",
                     "time": datetime.now().strftime("%H:%M"),
                     "sources": []
                 }
@@ -219,12 +253,12 @@ def mock_document_answer(question: str, doc_name: str) -> dict:
 current_session = st.session_state.sessions[st.session_state.current_session_id]
 
 with st.sidebar:
-    st.markdown('<div class="sidebar-header">💬 Chat Manager</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sidebar-header">{svg_icon("message", 20)} Chat Manager</div>', unsafe_allow_html=True)
     st.caption("Document Q&A Sessions & Settings")
     st.divider()
 
     # Chat Sessions Management
-    st.markdown("### 🗂️ Conversation History")
+    st.markdown(f'<h3 class="icon-heading">{svg_icon("history", 20)} Conversation History</h3>', unsafe_allow_html=True)
     
     session_keys = list(st.session_state.sessions.keys())
     active_idx = session_keys.index(st.session_state.current_session_id) if st.session_state.current_session_id in session_keys else 0
@@ -242,7 +276,7 @@ with st.sidebar:
             st.rerun()
 
     with col2:
-        if st.button("➕", help="New Session"):
+        if st.button("", icon=":material/add:", help="New Session"):
             new_id = f"Session {len(st.session_state.sessions) + 1}"
             st.session_state.sessions[new_id] = {
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -263,12 +297,12 @@ with st.sidebar:
     # Session stats
     msg_count = len(current_session["messages"])
     active_doc_name = current_session.get("active_doc")
-    st.caption(f"📊 Messages: **{msg_count}** | Active Doc: **{active_doc_name or 'None'}**")
+    st.caption(f"{svg_icon('chart', 14)} Messages: **{msg_count}** | Active Doc: **{html.escape(active_doc_name or 'None')}**", unsafe_allow_html=True)
 
     # Chat history action buttons
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("🧹 Clear Chat", use_container_width=True):
+        if st.button("Clear Chat", icon=":material/mop:", use_container_width=True):
             current_session["messages"] = [
                 {
                     "role": "assistant",
@@ -281,7 +315,8 @@ with st.sidebar:
     with c2:
         chat_export = json.dumps(current_session["messages"], indent=2)
         st.download_button(
-            label="💾 Export",
+            label="Export",
+            icon=":material/download:",
             data=chat_export,
             file_name=f"{st.session_state.current_session_id}_history.json",
             mime="application/json",
@@ -291,7 +326,7 @@ with st.sidebar:
     st.divider()
 
     # Backend Integration & Settings
-    with st.expander("⚙️ Backend API Settings", expanded=False):
+    with st.expander("Backend API Settings", icon=":material/settings:", expanded=False):
         st.session_state.use_mock_backend = st.toggle(
             "Mock / Standalone Mode",
             value=st.session_state.use_mock_backend,
@@ -317,7 +352,7 @@ with st.sidebar:
 header_col1, header_col2 = st.columns([3, 1])
 
 with header_col1:
-    st.title("🤖 Document Q&A Chatbot")
+    st.markdown(f'<h1 class="icon-heading">{svg_icon("bot", 36)} Document Q&amp;A Chatbot</h1>', unsafe_allow_html=True)
 
 with header_col2:
     mode_text = "Mock Demo" if st.session_state.use_mock_backend else "Backend API"
@@ -336,19 +371,19 @@ if active_doc:
         st.markdown(f"""
         <div class="active-doc-banner">
             <div>
-                <b>📄 Active Document:</b> <code>{active_doc}</code>
+                {svg_icon("file")} <b>Active Document:</b> <code>{html.escape(active_doc)}</code>
                 <span class='status-badge badge-success'>Attached & Ready</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
     with b_col2:
-        if st.button("🔄 Replace / Detach", use_container_width=True):
+        if st.button("Replace / Detach", icon=":material/sync:", use_container_width=True):
             current_session["active_doc"] = None
             current_session["doc_meta"] = None
             st.rerun()
 
 # Document Upload Box right in chat view
-with st.expander("📎 Upload Document to Chat", expanded=(active_doc is None)):
+with st.expander("Upload Document to Chat", icon=":material/attach_file:", expanded=(active_doc is None)):
     up_col1, up_col2 = st.columns([3, 1])
     with up_col1:
         chat_uploaded_file = st.file_uploader(
@@ -358,12 +393,12 @@ with st.expander("📎 Upload Document to Chat", expanded=(active_doc is None)):
             label_visibility="collapsed"
         )
     with up_col2:
-        upload_btn = st.button("⚡ Upload & Analyze", use_container_width=True, type="primary")
+        upload_btn = st.button("Upload & Analyze", icon=":material/bolt:", use_container_width=True, type="primary")
 
     if chat_uploaded_file is not None:
         file_size_kb = chat_uploaded_file.size / 1024
         file_size_str = f"{file_size_kb:.1f} KB" if file_size_kb < 1024 else f"{(file_size_kb/1024):.2f} MB"
-        st.caption(f"📁 **Selected:** `{chat_uploaded_file.name}` ({file_size_str})")
+        st.caption(f"{svg_icon('folder', 14)} **Selected:** <code>{html.escape(chat_uploaded_file.name)}</code> ({file_size_str})", unsafe_allow_html=True)
 
         if upload_btn:
             with st.spinner("Processing and indexing document..."):
@@ -375,7 +410,7 @@ with st.expander("📎 Upload Document to Chat", expanded=(active_doc is None)):
                         current_session["doc_meta"] = resp
                         current_session["messages"].append({
                             "role": "assistant",
-                            "content": f"📁 **{doc_name}** has been uploaded and indexed via the backend! Ask me anything about it.",
+                            "content": f"**{doc_name}** has been uploaded and indexed via the backend! Ask me anything about it.",
                             "time": datetime.now().strftime("%H:%M"),
                             "sources": []
                         })
@@ -393,7 +428,7 @@ with st.expander("📎 Upload Document to Chat", expanded=(active_doc is None)):
                     }
                     current_session["messages"].append({
                         "role": "assistant",
-                        "content": f"📁 **{doc_name}** has been processed and attached to this chat! Ask me anything about it.",
+                        "content": f"**{doc_name}** has been processed and attached to this chat! Ask me anything about it.",
                         "time": datetime.now().strftime("%H:%M"),
                         "sources": []
                     })
@@ -405,22 +440,22 @@ st.write("---")
 # Quick suggestion chips when a document is active
 quick_query = None
 if current_session.get("active_doc"):
-    st.caption("💡 Quick prompts for this document:")
+    st.caption(f"{svg_icon('lightbulb', 14)} Quick prompts for this document:", unsafe_allow_html=True)
     q_cols = st.columns(4)
-    if q_cols[0].button("📝 Summarize Document", use_container_width=True):
+    if q_cols[0].button("Summarize Document", icon=":material/summarize:", use_container_width=True):
         quick_query = "Please provide a comprehensive summary of this document."
-    if q_cols[1].button("🔑 Key Takeaways", use_container_width=True):
+    if q_cols[1].button("Key Takeaways", icon=":material/key:", use_container_width=True):
         quick_query = "What are the main key takeaways and highlights?"
-    if q_cols[2].button("❓ Action Items", use_container_width=True):
+    if q_cols[2].button("Action Items", icon=":material/checklist:", use_container_width=True):
         quick_query = "What action items or next steps are mentioned?"
-    if q_cols[3].button("🔍 Extract Conclusions", use_container_width=True):
+    if q_cols[3].button("Extract Conclusions", icon=":material/search:", use_container_width=True):
         quick_query = "What are the final conclusions of this document?"
 
 
 # Display conversation history
 for msg in current_session["messages"]:
     role = msg.get("role", "assistant")
-    avatar = "👤" if role == "user" else "🤖"
+    avatar = USER_AVATAR if role == "user" else BOT_AVATAR
     with st.chat_message(role, avatar=avatar):
         timestamp = msg.get("time", "")
         if timestamp:
@@ -430,7 +465,7 @@ for msg in current_session["messages"]:
         # Display source citations if available
         sources = msg.get("sources", [])
         if sources:
-            with st.expander("📚 Citations & Sources", expanded=False):
+            with st.expander("Citations & Sources", icon=":material/menu_book:", expanded=False):
                 for idx, src in enumerate(sources):
                     page_info = f"Page {src.get('page')}" if "page" in src else f"Source #{idx+1}"
                     snippet = src.get("snippet") or src.get("text") or "Relevant text excerpt"
@@ -452,12 +487,12 @@ if user_input:
     })
     
     # Display user query immediately
-    with st.chat_message("user", avatar="👤"):
+    with st.chat_message("user", avatar=USER_AVATAR):
         st.markdown(f'<span class="msg-timestamp">{user_time}</span>', unsafe_allow_html=True)
         st.markdown(user_input)
 
     # 2. Get answer from backend or mock
-    with st.chat_message("assistant", avatar="🤖"):
+    with st.chat_message("assistant", avatar=BOT_AVATAR):
         with st.spinner("Analyzing document and thinking..."):
             active_doc_name = current_session.get("active_doc") or "Uploaded Document"
             answer_text = ""
@@ -479,7 +514,7 @@ if user_input:
                     sources = resp.get("sources", [])
                 except Exception as err:
                     answer_text = (
-                        f"⚠️ **Error connecting to backend API:**\n\n"
+                        f":material/warning: **Error connecting to backend API:**\n\n"
                         f"`{str(err)}`\n\n"
                         f"Please ensure your friend's backend is running at `{st.session_state.backend_url}` "
                         f"or toggle on **'Mock / Standalone Mode'** in the sidebar settings."
@@ -491,7 +526,7 @@ if user_input:
             st.markdown(answer_text)
 
             if sources:
-                with st.expander("📚 Citations & Sources", expanded=False):
+                with st.expander("Citations & Sources", icon=":material/menu_book:", expanded=False):
                     for idx, src in enumerate(sources):
                         page_info = f"Page {src.get('page')}" if "page" in src else f"Source #{idx+1}"
                         snippet = src.get("snippet") or src.get("text") or "Relevant text excerpt"
