@@ -51,12 +51,13 @@ st.markdown("""
 
     /* Document card */
     .doc-card {
-        padding: 14px;
-        border-radius: 10px;
+        padding: 12px;
+        border-radius: 8px;
         background: #ffffff;
         border: 1px solid #e2e8f0;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
         margin-bottom: 12px;
+        font-size: 0.9rem;
     }
     
     /* Chat message container refinements */
@@ -67,24 +68,20 @@ st.markdown("""
     
     /* Sidebar header */
     .sidebar-header {
-        font-size: 1.15rem;
+        font-size: 1.2rem;
         font-weight: 700;
         color: #1e293b;
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.25rem;
         display: flex;
         align-items: center;
         gap: 8px;
     }
     
-    /* Source citation box */
-    .source-box {
-        font-size: 0.85rem;
-        background-color: #f1f5f9;
-        border-left: 3px solid #3b82f6;
-        padding: 8px 12px;
-        border-radius: 4px;
-        margin-top: 8px;
-        color: #334155;
+    .msg-timestamp {
+        font-size: 0.72rem;
+        color: #94a3b8;
+        float: right;
+        margin-top: -4px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -110,8 +107,8 @@ if "sessions" not in st.session_state:
         }
     }
 
-if "current_session_id" not in st.session_state:
-    st.session_state.current_session_id = "Session 1"
+if "current_session_id" not in st.session_state or st.session_state.current_session_id not in st.session_state.sessions:
+    st.session_state.current_session_id = next(iter(st.session_state.sessions))
 
 if "backend_url" not in st.session_state:
     st.session_state.backend_url = "http://localhost:8000"
@@ -129,7 +126,9 @@ def call_backend_upload(file, backend_url: str):
     Expects JSON: { "status": "success", "document_id": "...", "filename": "...", "total_pages": ... }
     """
     url = f"{backend_url.rstrip('/')}/api/upload"
-    files = {"file": (file.name, file.getvalue(), file.type)}
+    file_bytes = file.getvalue()
+    mime_type = file.type or "application/octet-stream"
+    files = {"file": (file.name, file_bytes, mime_type)}
     response = requests.post(url, files=files, timeout=60)
     response.raise_for_status()
     return response.json()
@@ -153,7 +152,7 @@ def call_backend_query(question: str, doc_name: str, history: list, backend_url:
     payload = {
         "query": question,
         "document_name": doc_name,
-        "history": [{"role": m["role"], "content": m["content"]} for m in history]
+        "history": [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in history]
     }
     response = requests.post(url, json=payload, timeout=60)
     response.raise_for_status()
@@ -163,7 +162,7 @@ def mock_document_answer(question: str, doc_name: str) -> dict:
     """
     Fallback mock response generator when backend is not running yet.
     """
-    time.sleep(0.8) # simulate network latency
+    time.sleep(0.6)  # simulate brief network latency
     q_lower = question.lower()
     
     if "summary" in q_lower or "summarize" in q_lower:
@@ -190,10 +189,10 @@ def mock_document_answer(question: str, doc_name: str) -> dict:
         sources = [{"page": 2, "snippet": "Section 2.1: Key findings & parameters."}]
     else:
         answer = (
-            f"Regarding your query *\"{question}\"* regarding **{doc_name}**:\n\n"
-            f"The document discusses this topic in the context of standard guidelines and reported data points. "
+            f"Regarding your question *\"{question}\"* on **{doc_name}**:\n\n"
+            f"The document highlights this subject in the context of standard guidelines and reported data points. "
             f"Relevant sections indicate targeted outcomes, timeline requirements, and responsible stakeholders.\n\n"
-            f"*(Connect the backend API at `{st.session_state.backend_url}` to query your RAG pipeline!)*"
+            f"*(Connect the backend API at `{st.session_state.backend_url}` to query your live RAG pipeline!)*"
         )
         sources = [{"page": 1, "snippet": f"Context matching query '{question}'."}]
 
@@ -214,7 +213,7 @@ with st.sidebar:
     # 1. Document Upload Section
     st.markdown("### 📤 Upload Document")
     uploaded_file = st.file_uploader(
-        "Choose a file",
+        "Choose a document file",
         type=["pdf", "docx", "txt", "csv", "md"],
         help="Upload PDF, DOCX, TXT, CSV, or Markdown files"
     )
@@ -226,9 +225,9 @@ with st.sidebar:
         # Display file metadata preview
         st.markdown(f"""
         <div class="doc-card">
-            <b>Name:</b> {uploaded_file.name}<br>
+            <b>File:</b> {uploaded_file.name}<br>
             <b>Size:</b> {file_size_str}<br>
-            <b>Type:</b> {uploaded_file.type or 'Text/Document'}
+            <b>Type:</b> {uploaded_file.type or 'Document'}
         </div>
         """, unsafe_allow_html=True)
 
@@ -241,18 +240,17 @@ with st.sidebar:
                         current_session["active_doc"] = doc_name
                         current_session["doc_meta"] = resp
                         st.success(f"Uploaded to backend: {doc_name}")
+                        st.rerun()
                     except Exception as err:
                         st.error(f"Failed to connect to backend: {err}")
-                        st.info("Tip: You can enable 'Frontend Mock/Demo Mode' below until the backend is live.")
+                        st.info("Tip: You can enable 'Frontend Mock/Demo Mode' below in settings until your friend's backend is ready.")
                 else:
-                    time.sleep(0.6)
                     current_session["active_doc"] = doc_name
                     current_session["doc_meta"] = {
                         "filename": doc_name,
                         "size": file_size_str,
                         "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     }
-                    st.success(f"Active Document: {doc_name}")
                     # Add notification in chat
                     current_session["messages"].append({
                         "role": "assistant",
@@ -260,6 +258,7 @@ with st.sidebar:
                         "time": datetime.now().strftime("%H:%M"),
                         "sources": []
                     })
+                    st.success(f"Active Document: {doc_name}")
                     st.rerun()
 
     if current_session.get("active_doc"):
@@ -269,19 +268,22 @@ with st.sidebar:
             current_session["doc_meta"] = None
             st.rerun()
     else:
-        st.warning("⚠️ No document actively linked to this chat.")
+        st.caption("ℹ️ No document actively linked to this chat.")
 
     st.divider()
 
     # 2. Chat Sessions Management
     st.markdown("### 💬 Chat Sessions")
     
+    session_keys = list(st.session_state.sessions.keys())
+    active_idx = session_keys.index(st.session_state.current_session_id) if st.session_state.current_session_id in session_keys else 0
+
     col1, col2 = st.columns([3, 1])
     with col1:
         selected_session = st.selectbox(
             "Select Session",
-            options=list(st.session_state.sessions.keys()),
-            index=list(st.session_state.sessions.keys()).index(st.session_state.current_session_id),
+            options=session_keys,
+            index=active_idx,
             label_visibility="collapsed"
         )
         if selected_session != st.session_state.current_session_id:
@@ -338,7 +340,7 @@ with st.sidebar:
         st.session_state.use_mock_backend = st.toggle(
             "Mock / Standalone Mode",
             value=st.session_state.use_mock_backend,
-            help="Toggle ON to test frontend immediately without a running backend. Toggle OFF to hit the backend API."
+            help="Toggle ON to test frontend immediately without a running backend. Toggle OFF to send live requests to your friend's backend API."
         )
         
         st.session_state.backend_url = st.text_input(
@@ -375,10 +377,10 @@ with header_col2:
 st.write("---")
 
 # Quick suggestion chips when a document is active
+quick_query = None
 if current_session.get("active_doc"):
     st.caption("💡 Quick prompts:")
     q_cols = st.columns(4)
-    quick_query = None
     if q_cols[0].button("📝 Summarize Document", use_container_width=True):
         quick_query = "Please provide a comprehensive summary of this document."
     if q_cols[1].button("🔑 Key Takeaways", use_container_width=True):
@@ -387,8 +389,6 @@ if current_session.get("active_doc"):
         quick_query = "What action items or next steps are mentioned?"
     if q_cols[3].button("🔍 Extract Conclusions", use_container_width=True):
         quick_query = "What are the final conclusions of this document?"
-else:
-    quick_query = None
 
 
 # Display conversation history
@@ -396,12 +396,10 @@ for msg in current_session["messages"]:
     role = msg.get("role", "assistant")
     avatar = "👤" if role == "user" else "🤖"
     with st.chat_message(role, avatar=avatar):
-        # Header with role and time
-        col_m1, col_m2 = st.columns([6, 1])
-        with col_m1:
-            st.markdown(msg.get("content", ""))
-        with col_m2:
-            st.caption(msg.get("time", ""))
+        timestamp = msg.get("time", "")
+        if timestamp:
+            st.markdown(f'<span class="msg-timestamp">{timestamp}</span>', unsafe_allow_html=True)
+        st.markdown(msg.get("content", ""))
 
         # Display source citations if available
         sources = msg.get("sources", [])
@@ -414,7 +412,8 @@ for msg in current_session["messages"]:
 
 
 # Handle Chat Input
-user_input = st.chat_input("Ask a question about your document...") or quick_query
+chat_prompt = st.chat_input("Ask a question about your document...")
+user_input = chat_prompt if chat_prompt else quick_query
 
 if user_input:
     # 1. Append user message to history
@@ -428,11 +427,8 @@ if user_input:
     
     # Display user query immediately
     with st.chat_message("user", avatar="👤"):
-        col_m1, col_m2 = st.columns([6, 1])
-        with col_m1:
-            st.markdown(user_input)
-        with col_m2:
-            st.caption(user_time)
+        st.markdown(f'<span class="msg-timestamp">{user_time}</span>', unsafe_allow_html=True)
+        st.markdown(user_input)
 
     # 2. Get answer from backend or mock
     with st.chat_message("assistant", avatar="🤖"):
@@ -460,15 +456,13 @@ if user_input:
                         f"⚠️ **Error connecting to backend API:**\n\n"
                         f"`{str(err)}`\n\n"
                         f"Please ensure your friend's backend is running at `{st.session_state.backend_url}` "
-                        f"or turn on **'Mock / Standalone Mode'** in the sidebar settings to test the frontend."
+                        f"or toggle on **'Mock / Standalone Mode'** in the sidebar settings."
                     )
             
             # Render response
-            col_m1, col_m2 = st.columns([6, 1])
-            with col_m1:
-                st.markdown(answer_text)
-            with col_m2:
-                st.caption(datetime.now().strftime("%H:%M"))
+            ans_time = datetime.now().strftime("%H:%M")
+            st.markdown(f'<span class="msg-timestamp">{ans_time}</span>', unsafe_allow_html=True)
+            st.markdown(answer_text)
 
             if sources:
                 with st.expander("📚 Citations & Sources", expanded=False):
@@ -481,7 +475,7 @@ if user_input:
     current_session["messages"].append({
         "role": "assistant",
         "content": answer_text,
-        "time": datetime.now().strftime("%H:%M"),
+        "time": ans_time,
         "sources": sources
     })
     st.rerun()
